@@ -1,93 +1,149 @@
-# ProxyKit
+# proxykit
 
-> **Swiss-army knife for proxy users.** Convert subscriptions, test nodes, detect streaming unlocks — one Go binary, zero configuration, ships everywhere.
+> **Swiss-army knife for proxy subscriptions.** Convert formats, probe liveness, detect streaming unlock, serve an HTTP + browser tool — one Go binary, zero runtime dependencies (except `sing-box` when you use `--via` / `--sub` / `--enable-probes`).
 
 [![status](https://img.shields.io/badge/status-alpha-orange)](https://github.com/Au1rxx/proxykit)
 [![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 [![go.mod](https://img.shields.io/badge/go-1.25-00ADD8)](./go.mod)
+[![release](https://img.shields.io/github/v/tag/Au1rxx/proxykit?label=release&color=00ADD8)](https://github.com/Au1rxx/proxykit/releases)
+
+**Translations**: [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [Español](./README.es.md) · [Français](./README.fr.md) · [Deutsch](./README.de.md) · [Русский](./README.ru.md)
 
 ---
 
-## What it does (MVP scope)
+## What it does
 
-| Module | Command | Status |
+| Subcommand | Purpose | Needs `sing-box` binary on PATH? |
 |---|---|---|
-| **Subscription converter** | `proxykit convert -i in.yaml --target singbox` | 🚧 W1–W2 |
-| **Node speed tester** | `proxykit test https://… --fast` | 🚧 W3 |
-| **Streaming unlock checker** | `proxykit test https://… --unlock-only` | 🚧 W5 |
-| **HTTP API + Web UI** | `proxykit serve --listen :8080` | 🚧 W6 |
-
-See [`docs/roadmap.md`](./docs/roadmap.md) for the 8-week MVP calendar.
+| `proxykit convert`  | Convert subscriptions between Clash / sing-box / v2ray / Surge / QuantumultX / Loon | no |
+| `proxykit test`     | Parse a subscription, run TCP + TLS handshake probes, emit a table/JSON/CSV report of which nodes are alive | no |
+| `proxykit unlock`   | Probe Netflix / Disney+ / YouTube Premium / ChatGPT unlock status. Three modes: `--direct` (from this host), `--via <uri>` (through a single proxy), or `--sub <file>` (per-node matrix against a whole subscription) | only for `--via` / `--sub` |
+| `proxykit serve`    | HTTP API + embedded single-page UI wrapping the above | only when `--enable-probes` |
 
 ---
 
-## Why this exists
-
-Every proxy user eventually needs to:
-
-1. **Convert subscriptions** between Clash / sing-box / v2ray / Surge / Quantumult X / Loon — because each client wants its own format, and the de-facto tool (`subconverter`) lags several months behind new protocols like Hysteria2, TUIC, and AnyTLS.
-2. **Test whether nodes actually work**, not just whether the port is open — including whether they unlock Netflix, Disney+, YouTube Premium, or ChatGPT from your region.
-3. **Run both of the above** without installing Docker, writing config files, or copying an URL into a scary third-party website.
-
-ProxyKit does all of that from a single Go binary and a zero-tracking static web UI. It's the sibling project to [`Au1rxx/free-vpn-subscriptions`](https://github.com/Au1rxx/free-vpn-subscriptions) — same author, same Node parsing code (shared via `pkg/node`), same "measure, don't promise" philosophy.
-
----
-
-## Quickstart (when binaries ship)
+## Quickstart
 
 ```bash
-# install
-curl -fsSL https://github.com/Au1rxx/proxykit/releases/latest/download/install.sh | sh
+# build (requires Go 1.25+)
+go install github.com/Au1rxx/proxykit/cmd/proxykit@latest
 
-# convert a Clash subscription into sing-box format
-proxykit convert --source clash --target singbox \
-  --input  my-subscription.yaml \
-  --output my-subscription.json
+# convert a Clash subscription → sing-box config
+proxykit convert --in nodes.yaml --to singbox > nodes.json
 
-# test 150 nodes from a public subscription, fast mode (~5 min)
-proxykit test https://au1rxx.github.io/free-vpn-subscriptions/output/v2ray-base64.txt \
-  --fast \
-  --format table
+# probe a subscription for TCP+TLS liveness
+proxykit test --in nodes.yaml --fast --format table
 
-# check which nodes unlock Netflix + ChatGPT
-proxykit test https://... \
-  --unlock-only \
-  --services netflix,chatgpt \
-  --format json > unlock-report.json
+# check which streaming services unlock from your machine
+proxykit unlock --direct
 
-# run the web UI locally
-proxykit serve --listen :8080
-# open http://localhost:8080
+# per-node streaming matrix across a whole subscription
+proxykit unlock --sub nodes.yaml --format json > matrix.json
+
+# run the browser tool on http://127.0.0.1:8080
+proxykit serve --addr 127.0.0.1:8080
+
+# same, with test/unlock endpoints enabled and a bearer token
+proxykit serve --addr 0.0.0.0:8080 --enable-probes --auth-token $SECRET
 ```
 
 ---
 
-## Supported protocols
+## Why another subconverter?
 
-VLESS (including Reality), VMess, Trojan, Shadowsocks, Hysteria2, TUIC v5, AnyTLS, WireGuard (passive emit only).
+[`subconverter`](https://github.com/tindy2013/subconverter) is the de facto tool but it's unmaintained enough to have missed several protocols. proxykit aims to be:
 
-New protocol support lands here first, then flows back to `free-vpn-subscriptions` through the shared `pkg/node` module.
+1. **Accurate about what it supports.** Today: VLESS, VMess, Trojan, Shadowsocks, Hysteria2. Not yet: VLESS Reality, TUIC, AnyTLS. The `emit` layer on Surge/QuantumultX/Loon is honest-partial: VLESS + Hysteria2 nodes are dropped silently because those clients have no stable native mapping.
+2. **Honest about what "alive" means.** TCP+TLS handshake is _not_ proof a node proxies traffic — but it's cheap and filters out 80% of dead feeds. The sibling [free-vpn-subscriptions](https://github.com/Au1rxx/free-vpn-subscriptions) repo adds a full HTTP-over-proxy stage on top for its public feed.
+3. **Honest about streaming-unlock heuristics.** They are best-effort snapshots of how Netflix / Disney+ / YouTube / ChatGPT are known to leak region information _right now_. Upstream services change these regularly; the `pkg/unlock` package is explicitly NOT semver-stable.
+4. **A single binary, no Docker, no web form.** The HTTP server is an optional subcommand, not the default mode.
+
+---
+
+## Streaming-unlock mode
+
+```bash
+# from this host
+proxykit unlock --direct
+
+# through a single proxy URI (spawns sing-box on demand)
+proxykit unlock --via 'trojan://pw@host:443?sni=host#my-node'
+
+# matrix across a whole subscription file
+proxykit unlock --sub nodes.yaml --target netflix,chatgpt --format json
+```
+
+**Output shape (matrix, `--sub --format json`):**
+
+```json
+[
+  { "node": "jp-01", "server": "1.2.3.4:443",
+    "results": [
+      {"target": "netflix", "status": "partial",  "region": "JP", "detail": "originals only"},
+      {"target": "chatgpt", "status": "unlocked", "region": "JP", "detail": "api compliance ok"}
+    ]
+  },
+  ...
+]
+```
+
+Each target returns one of `unlocked` / `partial` / `blocked` / `unknown`.
+
+---
+
+## HTTP API (`proxykit serve`)
+
+| Method + path | Auth | Purpose |
+|---|---|---|
+| `POST /api/convert?from=auto&to=singbox` | none | Same semantics as the CLI; body = raw subscription |
+| `POST /api/test?from=auto` | Bearer (if `--auth-token` set) | Returns `{total, alive, dropped}` |
+| `POST /api/unlock?from=auto&target=netflix,chatgpt` | Bearer | Returns the matrix shape above |
+| `GET /health` | none | `200 ok` |
+| `GET /version` | none | `200 proxykit <ver>` |
+| `GET /` | none | Embedded browser tool |
+
+**Threat-model notes** (read before binding to `0.0.0.0`):
+
+- `test` and `unlock` are opt-in (`--enable-probes`). They spawn `sing-box` subprocesses and make outbound requests through user-supplied proxy nodes.
+- A built-in SSRF filter drops nodes whose `server` field is RFC1918 / loopback / link-local / 169.254.169.254. It does NOT resolve hostnames — an attacker who controls DNS for `evil.example.com` pointing at `10.0.0.1` will currently bypass it. If you expose this endpoint to untrusted users, front it with a network policy that blocks outbound private ranges.
+- Per-request node caps (`--max-test-nodes 50`, `--max-unlock-nodes 10`) + global concurrency (`--parallel 2`) bound resource usage.
+- `--auth-token <string>` adds `Authorization: Bearer <token>` enforcement on the guarded endpoints.
 
 ---
 
 ## Relationship to free-vpn-subscriptions
 
-[`Au1rxx/free-vpn-subscriptions`](https://github.com/Au1rxx/free-vpn-subscriptions) is where the public subscription feed lives — 150 hourly-verified free VPN nodes, packaged for Clash / sing-box / v2ray. ProxyKit is what you use **on** those subscriptions (or your own private ones):
+[`Au1rxx/free-vpn-subscriptions`](https://github.com/Au1rxx/free-vpn-subscriptions) hosts the public hourly-verified VPN node feed (~150 alive nodes). proxykit is a toolbox you run **on** any subscription — theirs, yours, or someone else's — and shares the `Node` data model, parsing, emit, probe, and unlock code via public `pkg/*` modules:
 
-- need to convert the feed to Surge format? → `proxykit convert`
-- need to know which of the 150 nodes actually unlock Netflix from Germany? → `proxykit test --unlock-only`
-- need to host a small conversion API on your VPS? → `proxykit serve`
+| proxykit uses | from |
+|---|---|
+| `pkg/node` | URI parsing + normalised Node type |
+| `pkg/parse` | Clash YAML / base64 blob / URI-list → `[]*Node` |
+| `pkg/emit` | `[]*Node` → Clash / sing-box / v2ray / Surge / QuantumultX / Loon |
+| `pkg/probe` | TCP + TLS handshake liveness checks |
+| `pkg/unlock` | Netflix / Disney+ / YouTube / ChatGPT heuristics |
 
-Both projects share the `Node` data model via the public [`github.com/Au1rxx/free-vpn-subscriptions/pkg/node`](https://pkg.go.dev/github.com/Au1rxx/free-vpn-subscriptions/pkg/node) module, so new-protocol support added in one project immediately benefits the other.
+New protocol support lands in the node repo; proxykit picks it up with a `go get -u`.
 
 ---
 
-## Non-goals (what ProxyKit is *not*)
+## Non-goals
 
-- **Not a GUI client.** Use Clash Verge, Hiddify, or v2rayN for day-to-day browsing.
-- **Not a node operator.** ProxyKit doesn't run servers; it analyses subscriptions you already have.
-- **Not a paid SaaS.** Free and open source, period. If you need a managed panel, self-host [3x-ui](https://github.com/MHSanaei/3x-ui) or [Marzban](https://github.com/Gozargah/Marzban).
-- **Not a political tool.** This is a technical utility. Use it in accordance with your local laws.
+- **Not a GUI client.** Use Clash Verge, Hiddify, v2rayN for day-to-day browsing.
+- **Not a node operator.** proxykit doesn't run servers; it analyses subscriptions you already have.
+- **Not a paid SaaS.** Free and open source.
+- **Not a political tool.** Technical utility. Use in accordance with local law.
+
+---
+
+## Roadmap
+
+See the public-facing commit log. Internally tracked milestones:
+
+- **W1–W5** ✅ Shipped: convert (6 formats), test --fast, unlock (3 modes + sing-box launcher)
+- **W6** ✅ Shipped: `serve` subcommand with convert/test/unlock endpoints + embedded SPA
+- **W7** Cloudflare Worker port (evaluating feasibility: tinygo wasm compile of the convert layer)
+- **W8** v0.1.0 release tag + two-repo cross-promotion
 
 ---
 
