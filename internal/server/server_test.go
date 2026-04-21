@@ -22,7 +22,7 @@ func do(t *testing.T, h http.Handler, method, target, body string) *httptest.Res
 }
 
 func TestHealthAndVersion(t *testing.T) {
-	h := New("t-test")
+	h := New("t-test", nil)
 	if w := do(t, h, "GET", "/health", ""); w.Code != 200 || w.Body.String() != "ok" {
 		t.Errorf("/health code=%d body=%q", w.Code, w.Body.String())
 	}
@@ -32,7 +32,7 @@ func TestHealthAndVersion(t *testing.T) {
 }
 
 func TestIndex(t *testing.T) {
-	h := New("v0")
+	h := New("v0", nil)
 	w := do(t, h, "GET", "/", "")
 	if w.Code != 200 {
 		t.Fatalf("code=%d", w.Code)
@@ -44,7 +44,7 @@ func TestIndex(t *testing.T) {
 }
 
 func TestConvert_ClashToSingbox(t *testing.T) {
-	h := New("v0")
+	h := New("v0", nil)
 	clashYAML := `proxies:
   - name: "n1"
     type: trojan
@@ -64,7 +64,7 @@ func TestConvert_ClashToSingbox(t *testing.T) {
 }
 
 func TestConvert_MissingTo(t *testing.T) {
-	h := New("v0")
+	h := New("v0", nil)
 	w := do(t, h, "POST", "/api/convert", "x")
 	if w.Code != 400 {
 		t.Errorf("code=%d (want 400)", w.Code)
@@ -72,7 +72,7 @@ func TestConvert_MissingTo(t *testing.T) {
 }
 
 func TestConvert_EmptyBody(t *testing.T) {
-	h := New("v0")
+	h := New("v0", nil)
 	w := do(t, h, "POST", "/api/convert?to=clash", "")
 	if w.Code != 400 {
 		t.Errorf("code=%d (want 400)", w.Code)
@@ -80,7 +80,7 @@ func TestConvert_EmptyBody(t *testing.T) {
 }
 
 func TestConvert_TooBig(t *testing.T) {
-	h := New("v0")
+	h := New("v0", nil)
 	big := strings.Repeat("x", MaxBodyBytes+1)
 	w := do(t, h, "POST", "/api/convert?to=clash", big)
 	if w.Code != 400 {

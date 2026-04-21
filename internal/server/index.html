@@ -3,58 +3,122 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>proxykit — subscription converter</title>
+<title>proxykit — subscription toolbox</title>
 <style>
 :root { color-scheme: light dark; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; line-height: 1.45; }
 h1 { margin: 0 0 .25rem; font-size: 1.5rem; }
-.sub { color: #888; margin-bottom: 1.5rem; font-size: .9rem; }
+.sub { color: #888; margin-bottom: 1rem; font-size: .9rem; }
+.tabs { display: flex; gap: .25rem; border-bottom: 1px solid #888; margin-bottom: 1rem; }
+.tab { padding: .4rem .9rem; cursor: pointer; border: 1px solid transparent; border-bottom: none; border-radius: 4px 4px 0 0; font-size: .9rem; }
+.tab.active { border-color: #888; background: rgba(128,128,128,.1); font-weight: 600; }
+.panel { display: none; }
+.panel.active { display: block; }
 .row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin-bottom: .75rem; }
 label { font-size: .9rem; }
-select, button { font: inherit; padding: .35rem .6rem; border-radius: 4px; border: 1px solid #888; background: transparent; }
+input[type=text], input[type=password], select, button { font: inherit; padding: .35rem .6rem; border-radius: 4px; border: 1px solid #888; background: transparent; color: inherit; }
 button { cursor: pointer; font-weight: 600; }
 button:hover { background: rgba(128,128,128,.15); }
-textarea { width: 100%; min-height: 240px; font-family: var(--mono); font-size: 13px; padding: .5rem; border-radius: 4px; border: 1px solid #888; background: transparent; box-sizing: border-box; color: inherit; }
-#status { font-size: .85rem; min-height: 1.2em; color: #888; }
-.err { color: #c33; }
-.ok { color: #2a7; }
+button:disabled { opacity: .5; cursor: wait; }
+textarea { width: 100%; min-height: 200px; font-family: var(--mono); font-size: 13px; padding: .5rem; border-radius: 4px; border: 1px solid #888; background: transparent; box-sizing: border-box; color: inherit; }
+.status { font-size: .85rem; min-height: 1.2em; color: #888; }
+.err { color: #c33; } .ok { color: #2a7; }
 footer { margin-top: 2rem; font-size: .8rem; color: #888; }
 a { color: inherit; }
 </style>
 </head>
 <body>
 <h1>proxykit</h1>
-<div class="sub">Convert a subscription between Clash / sing-box / v2ray / Surge / QuantumultX / Loon.</div>
+<div class="sub">Convert, test, and probe streaming-unlock against proxy subscriptions. All in-browser · API is documented in the repo.</div>
 
-<div class="row">
-  <label>from
-    <select id="from">
-      <option value="auto">auto</option>
-      <option value="clash">clash</option>
-      <option value="v2ray">v2ray (base64)</option>
-      <option value="base64">base64</option>
-      <option value="uri-list">uri-list</option>
-    </select>
-  </label>
-  <label>to
-    <select id="to">
-      <option value="clash">clash</option>
-      <option value="singbox">singbox</option>
-      <option value="v2ray">v2ray</option>
-      <option value="surge">surge</option>
-      <option value="quanx">quanx</option>
-      <option value="loon">loon</option>
-    </select>
-  </label>
-  <button id="go">convert →</button>
-  <span id="status"></span>
+<div class="tabs">
+  <div class="tab active" data-tab="convert">convert</div>
+  <div class="tab" data-tab="test">test</div>
+  <div class="tab" data-tab="unlock">unlock</div>
 </div>
 
-<div class="row"><strong>input</strong></div>
-<textarea id="in" placeholder="paste subscription here (clash YAML, v2ray base64 blob, or a list of vless://… / vmess://… / trojan://… / ss://… / hy2://… URIs)"></textarea>
+<details style="margin-bottom:1rem">
+  <summary style="cursor:pointer;font-size:.9rem">server settings (bearer token, shared across tabs)</summary>
+  <div class="row" style="margin-top:.5rem">
+    <label>auth token <input type="password" id="token" placeholder="required if server started with --auth-token" size="30"></label>
+  </div>
+</details>
 
-<div class="row" style="margin-top:1rem;"><strong>output</strong></div>
-<textarea id="out" readonly></textarea>
+<!-- CONVERT TAB -->
+<div class="panel active" id="panel-convert">
+  <div class="row">
+    <label>from
+      <select id="c-from">
+        <option value="auto">auto</option>
+        <option value="clash">clash</option>
+        <option value="v2ray">v2ray (base64)</option>
+        <option value="base64">base64</option>
+        <option value="uri-list">uri-list</option>
+      </select>
+    </label>
+    <label>to
+      <select id="c-to">
+        <option value="clash">clash</option>
+        <option value="singbox">singbox</option>
+        <option value="v2ray">v2ray</option>
+        <option value="surge">surge</option>
+        <option value="quanx">quanx</option>
+        <option value="loon">loon</option>
+      </select>
+    </label>
+    <button id="c-go">convert →</button>
+    <span class="status" id="c-status"></span>
+  </div>
+  <div class="row"><strong>input</strong></div>
+  <textarea id="c-in" placeholder="paste subscription (clash YAML, v2ray base64, or uri-list)"></textarea>
+  <div class="row" style="margin-top:1rem"><strong>output</strong></div>
+  <textarea id="c-out" readonly></textarea>
+</div>
+
+<!-- TEST TAB -->
+<div class="panel" id="panel-test">
+  <div class="row">
+    <label>from
+      <select id="t-from">
+        <option value="auto">auto</option>
+        <option value="clash">clash</option>
+        <option value="v2ray">v2ray (base64)</option>
+        <option value="base64">base64</option>
+        <option value="uri-list">uri-list</option>
+      </select>
+    </label>
+    <button id="t-go">probe TCP+TLS →</button>
+    <span class="status" id="t-status"></span>
+  </div>
+  <div class="row"><strong>input</strong></div>
+  <textarea id="t-in" placeholder="paste subscription"></textarea>
+  <div class="row" style="margin-top:1rem"><strong>alive nodes (JSON)</strong></div>
+  <textarea id="t-out" readonly></textarea>
+</div>
+
+<!-- UNLOCK TAB -->
+<div class="panel" id="panel-unlock">
+  <div class="row">
+    <label>from
+      <select id="u-from">
+        <option value="auto">auto</option>
+        <option value="clash">clash</option>
+        <option value="v2ray">v2ray (base64)</option>
+        <option value="base64">base64</option>
+        <option value="uri-list">uri-list</option>
+      </select>
+    </label>
+    <label>targets
+      <input type="text" id="u-target" placeholder="netflix,disney,youtube-premium,chatgpt" size="40" value="netflix,chatgpt">
+    </label>
+    <button id="u-go">run matrix →</button>
+    <span class="status" id="u-status"></span>
+  </div>
+  <div class="row"><strong>input</strong> (10-node cap, each spawns sing-box)</div>
+  <textarea id="u-in" placeholder="paste subscription"></textarea>
+  <div class="row" style="margin-top:1rem"><strong>matrix (JSON)</strong></div>
+  <textarea id="u-out" readonly></textarea>
+</div>
 
 <footer>
 single-binary CLI + API: <a href="https://github.com/Au1rxx/proxykit">github.com/Au1rxx/proxykit</a>
@@ -63,22 +127,66 @@ single-binary CLI + API: <a href="https://github.com/Au1rxx/proxykit">github.com
 
 <script>
 const $ = id => document.getElementById(id);
-const status = (msg, cls) => { const s = $("status"); s.textContent = msg; s.className = cls || ""; };
-$("go").addEventListener("click", async () => {
-  const from = $("from").value, to = $("to").value, body = $("in").value;
-  if (!body.trim()) { status("input is empty", "err"); return; }
-  status("working…");
+
+// Tab switching
+document.querySelectorAll(".tab").forEach(t => {
+  t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
+    t.classList.add("active");
+    document.getElementById("panel-" + t.dataset.tab).classList.add("active");
+  });
+});
+
+const status = (el, msg, cls) => { el.textContent = msg; el.className = "status " + (cls || ""); };
+
+async function post(path, query, body, asJSON) {
+  const token = $("token").value.trim();
+  const headers = { "Content-Type": "text/plain" };
+  if (token) headers["Authorization"] = "Bearer " + token;
+  const qs = Object.entries(query).filter(([,v]) => v).map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
+  const r = await fetch(`${path}?${qs}`, { method: "POST", body, headers });
+  const text = await r.text();
+  if (!r.ok) throw new Error(text || `HTTP ${r.status}`);
+  return asJSON ? JSON.parse(text) : text;
+}
+
+// Convert
+$("c-go").addEventListener("click", async () => {
+  const btn = $("c-go"), st = $("c-status"), inp = $("c-in").value, out = $("c-out");
+  if (!inp.trim()) { status(st, "input is empty", "err"); return; }
+  btn.disabled = true; status(st, "working…");
   try {
-    const r = await fetch(`/api/convert?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
-      method: "POST", body, headers: {"Content-Type": "text/plain"}
-    });
-    const txt = await r.text();
-    if (!r.ok) { $("out").value = ""; status(txt || `HTTP ${r.status}`, "err"); return; }
-    $("out").value = txt;
-    status(`ok (${txt.length} bytes)`, "ok");
-  } catch (e) {
-    status(String(e), "err");
-  }
+    const r = await post("/api/convert", {from: $("c-from").value, to: $("c-to").value}, inp, false);
+    out.value = r; status(st, `ok (${r.length} bytes)`, "ok");
+  } catch (e) { out.value = ""; status(st, String(e.message || e), "err"); }
+  finally { btn.disabled = false; }
+});
+
+// Test
+$("t-go").addEventListener("click", async () => {
+  const btn = $("t-go"), st = $("t-status"), inp = $("t-in").value, out = $("t-out");
+  if (!inp.trim()) { status(st, "input is empty", "err"); return; }
+  btn.disabled = true; status(st, "probing…");
+  try {
+    const r = await post("/api/test", {from: $("t-from").value}, inp, true);
+    out.value = JSON.stringify(r, null, 2);
+    status(st, `${r.alive.length} alive / ${r.total} total${r.dropped ? `, ${r.dropped.length} dropped` : ""}`, "ok");
+  } catch (e) { out.value = ""; status(st, String(e.message || e), "err"); }
+  finally { btn.disabled = false; }
+});
+
+// Unlock
+$("u-go").addEventListener("click", async () => {
+  const btn = $("u-go"), st = $("u-status"), inp = $("u-in").value, out = $("u-out");
+  if (!inp.trim()) { status(st, "input is empty", "err"); return; }
+  btn.disabled = true; status(st, "spawning sing-box per node — this is slow…");
+  try {
+    const r = await post("/api/unlock", {from: $("u-from").value, target: $("u-target").value}, inp, true);
+    out.value = JSON.stringify(r, null, 2);
+    status(st, `matrix: ${r.rows.length} nodes × ${r.targets.length} targets`, "ok");
+  } catch (e) { out.value = ""; status(st, String(e.message || e), "err"); }
+  finally { btn.disabled = false; }
 });
 </script>
 </body>
