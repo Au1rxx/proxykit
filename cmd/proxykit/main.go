@@ -7,16 +7,30 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/spf13/cobra"
 )
 
 // Version is stamped at build time via -ldflags "-X main.Version=...".
 var Version = "dev"
 
 func main() {
-	if len(os.Args) >= 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
-		fmt.Println("proxykit", Version)
-		return
+	root := &cobra.Command{
+		Use:   "proxykit",
+		Short: "Subscription conversion, testing, and ranking toolkit",
+		Long: "proxykit is a single-binary Swiss-army toolbox for working " +
+			"with proxy subscriptions: convert between Clash / sing-box / " +
+			"v2ray formats, batch-test latency and streaming unlock, serve " +
+			"a local HTTP API. See `proxykit <command> --help`.",
+		Version:       Version,
+		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
-	fmt.Fprintln(os.Stderr, "proxykit: subcommands not wired yet; scaffold only. See docs/roadmap.md.")
-	os.Exit(1)
+	root.SetVersionTemplate("proxykit {{.Version}}\n")
+	root.AddCommand(newConvertCmd())
+
+	if err := root.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
 }
