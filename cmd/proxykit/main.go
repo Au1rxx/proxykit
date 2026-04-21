@@ -30,6 +30,7 @@ func main() {
 	root.AddCommand(newConvertCmd())
 	root.AddCommand(newTestCmd())
 	root.AddCommand(newUnlockCmd())
+	root.AddCommand(newServeCmd())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)

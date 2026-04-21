@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>proxykit — subscription converter</title>
+<style>
+:root { color-scheme: light dark; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; line-height: 1.45; }
+h1 { margin: 0 0 .25rem; font-size: 1.5rem; }
+.sub { color: #888; margin-bottom: 1.5rem; font-size: .9rem; }
+.row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin-bottom: .75rem; }
+label { font-size: .9rem; }
+select, button { font: inherit; padding: .35rem .6rem; border-radius: 4px; border: 1px solid #888; background: transparent; }
+button { cursor: pointer; font-weight: 600; }
+button:hover { background: rgba(128,128,128,.15); }
+textarea { width: 100%; min-height: 240px; font-family: var(--mono); font-size: 13px; padding: .5rem; border-radius: 4px; border: 1px solid #888; background: transparent; box-sizing: border-box; color: inherit; }
+#status { font-size: .85rem; min-height: 1.2em; color: #888; }
+.err { color: #c33; }
+.ok { color: #2a7; }
+footer { margin-top: 2rem; font-size: .8rem; color: #888; }
+a { color: inherit; }
+</style>
+</head>
+<body>
+<h1>proxykit</h1>
+<div class="sub">Convert a subscription between Clash / sing-box / v2ray / Surge / QuantumultX / Loon.</div>
+
+<div class="row">
+  <label>from
+    <select id="from">
+      <option value="auto">auto</option>
+      <option value="clash">clash</option>
+      <option value="v2ray">v2ray (base64)</option>
+      <option value="base64">base64</option>
+      <option value="uri-list">uri-list</option>
+    </select>
+  </label>
+  <label>to
+    <select id="to">
+      <option value="clash">clash</option>
+      <option value="singbox">singbox</option>
+      <option value="v2ray">v2ray</option>
+      <option value="surge">surge</option>
+      <option value="quanx">quanx</option>
+      <option value="loon">loon</option>
+    </select>
+  </label>
+  <button id="go">convert →</button>
+  <span id="status"></span>
+</div>
+
+<div class="row"><strong>input</strong></div>
+<textarea id="in" placeholder="paste subscription here (clash YAML, v2ray base64 blob, or a list of vless://… / vmess://… / trojan://… / ss://… / hy2://… URIs)"></textarea>
+
+<div class="row" style="margin-top:1rem;"><strong>output</strong></div>
+<textarea id="out" readonly></textarea>
+
+<footer>
+single-binary CLI + API: <a href="https://github.com/Au1rxx/proxykit">github.com/Au1rxx/proxykit</a>
+· node feed: <a href="https://github.com/Au1rxx/free-vpn-subscriptions">Au1rxx/free-vpn-subscriptions</a>
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const status = (msg, cls) => { const s = $("status"); s.textContent = msg; s.className = cls || ""; };
+$("go").addEventListener("click", async () => {
+  const from = $("from").value, to = $("to").value, body = $("in").value;
+  if (!body.trim()) { status("input is empty", "err"); return; }
+  status("working…");
+  try {
+    const r = await fetch(`/api/convert?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
+      method: "POST", body, headers: {"Content-Type": "text/plain"}
+    });
+    const txt = await r.text();
+    if (!r.ok) { $("out").value = ""; status(txt || `HTTP ${r.status}`, "err"); return; }
+    $("out").value = txt;
+    status(`ok (${txt.length} bytes)`, "ok");
+  } catch (e) {
+    status(String(e), "err");
+  }
+});
+</script>
+</body>
+</html>
