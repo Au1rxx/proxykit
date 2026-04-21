@@ -3,6 +3,9 @@ dist/
 *.test
 *.out
 coverage.*
+
+# Stray dev build of the CLI at repo root
+/proxykit
 .DS_Store
 .idea/
 .vscode/
