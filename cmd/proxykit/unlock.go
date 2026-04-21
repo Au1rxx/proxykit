@@ -12,8 +12,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Au1rxx/free-vpn-subscriptions/pkg/node"
 	"github.com/Au1rxx/free-vpn-subscriptions/pkg/unlock"
 
+	"github.com/Au1rxx/proxykit/internal/convert"
 	"github.com/Au1rxx/proxykit/internal/singbox"
 )
 
@@ -25,32 +27,43 @@ func newUnlockCmd() *cobra.Command {
 		timeoutMS int
 		direct    bool
 		via       string
+		sub       string
+		from      string
 	)
 	cmd := &cobra.Command{
 		Use:   "unlock",
 		Short: "Check streaming / service unlock status (Netflix, Disney+, YouTube Premium, ChatGPT)",
 		Long: "Run the unlock probe suite against an HTTP client and report per-target " +
 			"Status (blocked|partial|unlocked) + Region when known.\n\n" +
-			"Two modes:\n" +
-			"  --direct           probe from this machine (no proxy)\n" +
-			"  --via <proxy-uri>  spin up a one-shot sing-box SOCKS5 inbound\n" +
-			"                     bound to the given vless/vmess/trojan/ss/hy2\n" +
-			"                     URI and route probes through it\n\n" +
-			"`--via` requires a `sing-box` binary on PATH (https://sing-box.sagernet.org/).",
+			"Three modes (exactly one required):\n" +
+			"  --direct              probe from this machine (no proxy)\n" +
+			"  --via <proxy-uri>     spin up a one-shot sing-box SOCKS5 inbound\n" +
+			"                        bound to the given vless/vmess/trojan/ss/hy2\n" +
+			"                        URI and route probes through it\n" +
+			"  --sub <file>          parse a subscription file (clash/v2ray/uri-list,\n" +
+			"                        auto-detected) and run unlock against every\n" +
+			"                        node in sequence — one sing-box subprocess\n" +
+			"                        per node, matrix output\n\n" +
+			"`--via` and `--sub` require a `sing-box` binary on PATH (https://sing-box.sagernet.org/).",
 		Example: "  proxykit unlock --direct\n" +
 			"  proxykit unlock --direct --target netflix,chatgpt --format json\n" +
-			"  proxykit unlock --via 'trojan://pw@host:443?sni=host#t1'",
+			"  proxykit unlock --via 'trojan://pw@host:443?sni=host#t1'\n" +
+			"  proxykit unlock --sub nodes.yaml --format json -o matrix.json",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if (direct && via != "") || (!direct && via == "") {
-				return fmt.Errorf("exactly one of --direct or --via <uri> is required")
+			if err := checkMutex(direct, via, sub); err != nil {
+				return err
 			}
-
 			selected, err := selectTargets(targets)
 			if err != nil {
 				return err
 			}
-
 			ctx := cmd.Context()
+			perTarget := time.Duration(timeoutMS) * time.Millisecond
+
+			if sub != "" {
+				return runSubMatrix(ctx, sub, from, selected, perTarget, outPath, format)
+			}
+
 			client, modeLabel, cleanup, err := buildUnlockClient(ctx, direct, via, timeoutMS)
 			if err != nil {
 				return err
@@ -58,7 +71,7 @@ func newUnlockCmd() *cobra.Command {
 			defer cleanup()
 
 			fmt.Fprintf(os.Stderr, "probing %d targets (%s, per-target %dms)...\n", len(selected), modeLabel, timeoutMS)
-			results := unlock.Run(ctx, client, selected, time.Duration(timeoutMS)*time.Millisecond)
+			results := unlock.Run(ctx, client, selected, perTarget)
 
 			return writeUnlockReport(outPath, format, results)
 		},
@@ -69,7 +82,26 @@ func newUnlockCmd() *cobra.Command {
 	cmd.Flags().IntVar(&timeoutMS, "timeout-ms", 8000, "per-target timeout in milliseconds")
 	cmd.Flags().BoolVar(&direct, "direct", false, "probe from this machine (no proxy)")
 	cmd.Flags().StringVar(&via, "via", "", "route probes through a single proxy URI (vless/vmess/trojan/ss/hy2); requires sing-box on PATH")
+	cmd.Flags().StringVar(&sub, "sub", "", "subscription file (clash/v2ray/uri-list); runs unlock per node; requires sing-box on PATH")
+	cmd.Flags().StringVar(&from, "from", "auto", "input format for --sub: auto|clash|v2ray|uri-list|base64")
 	return cmd
+}
+
+func checkMutex(direct bool, via, sub string) error {
+	n := 0
+	if direct {
+		n++
+	}
+	if via != "" {
+		n++
+	}
+	if sub != "" {
+		n++
+	}
+	if n != 1 {
+		return fmt.Errorf("exactly one of --direct, --via <uri>, or --sub <file> is required")
+	}
+	return nil
 }
 
 // buildUnlockClient returns an *http.Client either talking directly
@@ -83,8 +115,12 @@ func buildUnlockClient(ctx context.Context, direct bool, via string, timeoutMS i
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("launch sing-box: %w", err)
 	}
+	return nodeClient(proc, timeoutMS), "via " + proc.SocksAddr, proc.Stop, nil
+}
+
+func nodeClient(proc *singbox.Proc, timeoutMS int) *http.Client {
 	proxyURL, _ := url.Parse("socks5://" + proc.SocksAddr)
-	client := &http.Client{
+	return &http.Client{
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyURL(proxyURL),
 			DisableKeepAlives:     true,
@@ -92,7 +128,59 @@ func buildUnlockClient(ctx context.Context, direct bool, via string, timeoutMS i
 		},
 		Timeout: time.Duration(timeoutMS) * time.Millisecond,
 	}
-	return client, "via " + proc.SocksAddr, proc.Stop, nil
+}
+
+// NodeRow is one row in the matrix — one subscription node with its
+// per-target unlock verdicts (or an Error describing why the node
+// was skipped before probes could run).
+type NodeRow struct {
+	Node    string          `json:"node"`
+	Server  string          `json:"server"`
+	Error   string          `json:"error,omitempty"`
+	Results []unlock.Result `json:"results,omitempty"`
+}
+
+func runSubMatrix(ctx context.Context, path, from string, selected []unlock.Target, perTarget time.Duration, outPath, format string) error {
+	body, err := readInput(path)
+	if err != nil {
+		return fmt.Errorf("read subscription: %w", err)
+	}
+	nodes, err := convert.Decode(body, from)
+	if err != nil {
+		return fmt.Errorf("parse subscription (--from %s): %w", from, err)
+	}
+	if len(nodes) == 0 {
+		return fmt.Errorf("no nodes in subscription")
+	}
+
+	timeoutMS := int(perTarget / time.Millisecond)
+	fmt.Fprintf(os.Stderr, "probing %d nodes × %d targets (per-target %dms, sequential)...\n", len(nodes), len(selected), timeoutMS)
+
+	rows := make([]NodeRow, 0, len(nodes))
+	for i, n := range nodes {
+		row := NodeRow{Node: nodeLabel(n, i), Server: fmt.Sprintf("%s:%d", n.Server, n.Port)}
+		fmt.Fprintf(os.Stderr, "[%d/%d] %s\n", i+1, len(nodes), row.Node)
+
+		proc, err := singbox.LaunchNode(ctx, n, singbox.Config{})
+		if err != nil {
+			row.Error = err.Error()
+			rows = append(rows, row)
+			continue
+		}
+		client := nodeClient(proc, timeoutMS)
+		row.Results = unlock.Run(ctx, client, selected, perTarget)
+		proc.Stop()
+		rows = append(rows, row)
+	}
+
+	return writeMatrixReport(outPath, format, selected, rows)
+}
+
+func nodeLabel(n *node.Node, idx int) string {
+	if n.Name != "" {
+		return n.Name
+	}
+	return fmt.Sprintf("%02d-%s", idx+1, n.Protocol)
 }
 
 func selectTargets(spec string) ([]unlock.Target, error) {
@@ -154,4 +242,61 @@ func writeUnlockReport(path, format string, results []unlock.Result) error {
 	default:
 		return fmt.Errorf("unknown --format %q (want table|json)", format)
 	}
+}
+
+func writeMatrixReport(path, format string, selected []unlock.Target, rows []NodeRow) error {
+	w, closeFn, err := openOutput(path)
+	if err != nil {
+		return err
+	}
+	defer closeFn()
+
+	switch format {
+	case "json":
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		return enc.Encode(rows)
+	case "table":
+		cols := make([]string, 0, len(selected))
+		for _, t := range selected {
+			cols = append(cols, t.Name)
+		}
+		fmt.Fprintf(w, "%-28s", "NODE")
+		for _, c := range cols {
+			fmt.Fprintf(w, "%-17s", c)
+		}
+		fmt.Fprintf(w, "%s\n", "NOTE")
+		for _, r := range rows {
+			fmt.Fprintf(w, "%-28s", truncCol(r.Node, 27))
+			if r.Error != "" {
+				for range cols {
+					fmt.Fprintf(w, "%-17s", "-")
+				}
+				fmt.Fprintf(w, "error: %s\n", truncCol(r.Error, 80))
+				continue
+			}
+			statusByTarget := map[string]string{}
+			for _, res := range r.Results {
+				statusByTarget[res.Target] = res.StatusText
+			}
+			for _, c := range cols {
+				s := statusByTarget[c]
+				if s == "" {
+					s = "-"
+				}
+				fmt.Fprintf(w, "%-17s", s)
+			}
+			fmt.Fprintf(w, "%s\n", r.Server)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown --format %q (want table|json)", format)
+	}
+}
+
+func truncCol(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n-1] + "…"
 }

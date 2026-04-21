@@ -48,14 +48,25 @@ type Proc struct {
 	cancel  context.CancelFunc
 }
 
-// Launch parses uri into a node, writes a minimal sing-box config
-// (mixed inbound on ListenPort → proxy outbound), starts the binary,
-// and waits for the inbound to accept TCP. Callers MUST call Stop to
-// terminate the subprocess and delete the config file.
+// Launch parses uri into a node then delegates to LaunchNode. Callers
+// MUST call Stop on the returned Proc to terminate the subprocess and
+// delete the config file.
 func Launch(ctx context.Context, uri string, cfg Config) (*Proc, error) {
 	n, err := node.ParseURI(uri)
 	if err != nil {
 		return nil, fmt.Errorf("parse uri: %w", err)
+	}
+	return LaunchNode(ctx, n, cfg)
+}
+
+// LaunchNode writes a minimal sing-box config (mixed inbound on
+// ListenPort → proxy outbound built from n), starts the binary, and
+// waits for the inbound to accept TCP. Prefer this over Launch when
+// you already have a parsed *node.Node (e.g. from pkg/parse) and want
+// to skip the URI round-trip.
+func LaunchNode(ctx context.Context, n *node.Node, cfg Config) (*Proc, error) {
+	if n == nil {
+		return nil, fmt.Errorf("launch: nil node")
 	}
 	if !n.Valid() {
 		return nil, fmt.Errorf("parsed node is invalid: %s %s:%d", n.Protocol, n.Server, n.Port)
@@ -71,10 +82,11 @@ func Launch(ctx context.Context, uri string, cfg Config) (*Proc, error) {
 
 	port := cfg.ListenPort
 	if port == 0 {
-		port, err = pickFreePort()
+		p, err := pickFreePort()
 		if err != nil {
 			return nil, fmt.Errorf("pick free port: %w", err)
 		}
+		port = p
 	}
 
 	ob := upstream.SingboxOutbound(n, "proxy")
