@@ -3,7 +3,7 @@ module github.com/Au1rxx/proxykit
 go 1.25.0
 
 require (
-	github.com/Au1rxx/free-vpn-subscriptions v0.2.0
+	github.com/Au1rxx/free-vpn-subscriptions v0.3.0
 	github.com/spf13/cobra v1.10.2
 )
 

@@ -28,6 +28,7 @@ func main() {
 	}
 	root.SetVersionTemplate("proxykit {{.Version}}\n")
 	root.AddCommand(newConvertCmd())
+	root.AddCommand(newTestCmd())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
