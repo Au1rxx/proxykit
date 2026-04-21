@@ -81,3 +81,30 @@ func TestEncode_RejectsUnknownFormat(t *testing.T) {
 		t.Error("expected error for unknown output format, got nil")
 	}
 }
+
+func TestConvert_ClashToPartialFormats(t *testing.T) {
+	nodes, err := Decode([]byte(sampleClash), "auto")
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	cases := []struct {
+		format string
+		wants  []string
+	}{
+		{"surge", []string{"[Proxy]", "= trojan, trojan.example.com, 443", "= ss, ss.example.com, 8388"}},
+		{"quanx", []string{"[server_local]", "trojan=trojan.example.com:443", "shadowsocks=ss.example.com:8388"}},
+		{"loon", []string{"[Proxy]", "= trojan,trojan.example.com,443", "= Shadowsocks,ss.example.com,8388"}},
+	}
+	for _, c := range cases {
+		out, err := Encode(nodes, c.format)
+		if err != nil {
+			t.Errorf("Encode(%s): %v", c.format, err)
+			continue
+		}
+		for _, w := range c.wants {
+			if !strings.Contains(out, w) {
+				t.Errorf("Encode(%s) missing %q:\n%s", c.format, w, out)
+			}
+		}
+	}
+}

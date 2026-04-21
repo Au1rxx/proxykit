@@ -32,6 +32,8 @@ func Decode(body []byte, format string) ([]*node.Node, error) {
 }
 
 // Encode renders Nodes into the requested output format.
+// surge/quanx/loon are partial-coverage formats: VLESS and Hysteria2 nodes
+// are dropped silently because those clients have no native mapping.
 func Encode(nodes []*node.Node, format string) (string, error) {
 	switch format {
 	case "clash":
@@ -40,8 +42,14 @@ func Encode(nodes []*node.Node, format string) (string, error) {
 		return emit.Singbox(nodes)
 	case "v2ray":
 		return emit.V2RayBase64(nodes), nil
+	case "surge":
+		return emit.Surge(nodes)
+	case "quanx":
+		return emit.QuantumultX(nodes)
+	case "loon":
+		return emit.Loon(nodes)
 	default:
-		return "", fmt.Errorf("unknown output format %q (want clash|singbox|v2ray)", format)
+		return "", fmt.Errorf("unknown output format %q (want clash|singbox|v2ray|surge|quanx|loon)", format)
 	}
 }
 

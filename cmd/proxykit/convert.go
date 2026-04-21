@@ -21,14 +21,17 @@ func newConvertCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "convert",
-		Short: "Convert a subscription between clash / singbox / v2ray formats",
+		Short: "Convert a subscription between clash / singbox / v2ray / surge / quanx / loon",
 		Long: "Read a subscription file (or stdin if -i -) in one format, " +
 			"decode it into the normalized node model, and re-emit it in " +
 			"the chosen output format.\n\n" +
 			"Input formats (--from): auto (default), clash, uri-list, base64\n" +
-			"Output formats (--to):  clash, singbox, v2ray",
+			"Output formats (--to):  clash, singbox, v2ray, surge, quanx, loon\n\n" +
+			"surge / quanx / loon are partial-coverage — VLESS and Hysteria2 " +
+			"nodes are dropped silently (no native mapping in those clients).",
 		Example: "  proxykit convert -i sub.yaml --to singbox -o out.json\n" +
-			"  cat sub.txt | proxykit convert -i - --from base64 --to clash",
+			"  cat sub.txt | proxykit convert -i - --from base64 --to clash\n" +
+			"  proxykit convert -i sub.yaml --to surge -o surge.conf",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			data, err := readInput(inPath)
 			if err != nil {
@@ -55,7 +58,7 @@ func newConvertCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&inPath, "in", "i", "-", "input file, or '-' for stdin")
 	cmd.Flags().StringVarP(&outPath, "out", "o", "-", "output file, or '-' for stdout")
 	cmd.Flags().StringVar(&from, "from", "auto", "input format: auto|clash|uri-list|base64")
-	cmd.Flags().StringVar(&to, "to", "", "output format: clash|singbox|v2ray (required)")
+	cmd.Flags().StringVar(&to, "to", "", "output format: clash|singbox|v2ray|surge|quanx|loon (required)")
 	_ = cmd.MarkFlagRequired("to")
 	return cmd
 }
