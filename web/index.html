@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>proxykit · online subscription converter</title>
+<meta name="description" content="Free, in-browser converter between Clash, sing-box, v2ray, Surge, QuantumultX and Loon proxy subscriptions. No upload, no server — runs as WebAssembly in your browser.">
+<link rel="canonical" href="https://au1rxx.github.io/proxykit/">
+<style>
+  :root {
+    color-scheme: light dark;
+    --fg: #1a1a1a;
+    --bg: #ffffff;
+    --muted: #6b7280;
+    --border: #d1d5db;
+    --accent: #00ADD8;
+    --accent-hover: #0091b3;
+    --code-bg: #f5f5f5;
+    --error: #b91c1c;
+    --ok: #166534;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fg: #e5e7eb;
+      --bg: #0f172a;
+      --muted: #9ca3af;
+      --border: #334155;
+      --code-bg: #1e293b;
+      --error: #fca5a5;
+      --ok: #86efac;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    padding: 24px 16px 48px;
+    max-width: 960px;
+    margin-inline: auto;
+  }
+  header { margin-bottom: 24px; }
+  h1 {
+    font-size: 28px;
+    margin: 0 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h1 a { color: inherit; text-decoration: none; }
+  .tagline { color: var(--muted); margin: 0; font-size: 14px; }
+  .links { margin-top: 8px; font-size: 13px; }
+  .links a { color: var(--accent); text-decoration: none; margin-right: 12px; }
+  .links a:hover { text-decoration: underline; }
+
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr) auto;
+    gap: 8px;
+    align-items: end;
+    margin-bottom: 12px;
+  }
+  .controls label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  select, button, textarea {
+    font: inherit;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  select { width: 100%; }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    padding: 9px 18px;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { opacity: 0.5; cursor: wait; }
+
+  .panes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 720px) {
+    .controls { grid-template-columns: 1fr 1fr; }
+    .controls button { grid-column: span 2; }
+    .panes { grid-template-columns: 1fr; }
+  }
+  .pane label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  textarea {
+    width: 100%;
+    min-height: 320px;
+    resize: vertical;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .status {
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    background: var(--code-bg);
+    min-height: 1.55em;
+  }
+  .status.error { color: var(--error); }
+  .status.ok { color: var(--ok); }
+
+  footer {
+    margin-top: 36px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  footer a { color: var(--accent); }
+  code {
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  details { margin-top: 14px; font-size: 13px; }
+  details summary { cursor: pointer; color: var(--muted); }
+  details ul { margin: 6px 0 0 18px; padding: 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><a href="./">proxykit</a> <span style="font-size:13px;color:var(--muted);font-weight:400">online converter</span></h1>
+  <p class="tagline">Convert proxy subscriptions between 6 formats. Runs entirely in your browser via WebAssembly — your input never leaves the page.</p>
+  <p class="links">
+    <a href="https://github.com/Au1rxx/proxykit">GitHub</a>
+    <a href="https://github.com/Au1rxx/proxykit/releases">Download CLI</a>
+    <a href="https://github.com/Au1rxx/free-vpn-subscriptions">Free node feed</a>
+  </p>
+</header>
+
+<div class="controls">
+  <div>
+    <label for="from">Input format</label>
+    <select id="from">
+      <option value="auto">auto-detect</option>
+      <option value="clash">Clash YAML</option>
+      <option value="uri-list">URI list</option>
+      <option value="base64">v2ray base64</option>
+    </select>
+  </div>
+  <div>
+    <label for="to">Output format</label>
+    <select id="to">
+      <option value="singbox">sing-box JSON</option>
+      <option value="clash">Clash YAML</option>
+      <option value="v2ray">v2ray base64</option>
+      <option value="surge">Surge conf</option>
+      <option value="quanx">QuantumultX</option>
+      <option value="loon">Loon</option>
+    </select>
+  </div>
+  <div>
+    <button id="go" disabled>Loading wasm…</button>
+  </div>
+</div>
+
+<div class="panes">
+  <div class="pane">
+    <label for="input">Input</label>
+    <textarea id="input" spellcheck="false" placeholder="Paste a Clash YAML, URI list, or v2ray base64 blob here…"></textarea>
+  </div>
+  <div class="pane">
+    <label for="output">Output</label>
+    <textarea id="output" spellcheck="false" readonly placeholder="Result appears here…"></textarea>
+  </div>
+</div>
+
+<div id="status" class="status">Loading WebAssembly module…</div>
+
+<details>
+  <summary>What's supported / what's not</summary>
+  <ul>
+    <li><b>Protocols handled:</b> VLESS, VMess, Trojan, Shadowsocks, Hysteria2.</li>
+    <li><b>Not yet:</b> VLESS Reality, TUIC, AnyTLS.</li>
+    <li><b>Surge / QuantumultX / Loon</b> are partial-coverage outputs — VLESS and Hysteria2 nodes are dropped silently because those clients have no native mapping.</li>
+    <li><b>Need probes / streaming-unlock detection?</b> Use the CLI: <code>go install github.com/Au1rxx/proxykit/cmd/proxykit@latest</code> — those features need a sing-box subprocess, which can't run in a browser.</li>
+  </ul>
+</details>
+
+<footer>
+  <p>
+    proxykit is MIT-licensed. Source on
+    <a href="https://github.com/Au1rxx/proxykit">github.com/Au1rxx/proxykit</a>.
+    Sister project <a href="https://github.com/Au1rxx/free-vpn-subscriptions">free-vpn-subscriptions</a>
+    publishes an hourly-verified public node feed (~150 alive nodes) that you can paste straight in here.
+  </p>
+  <p>
+    Heuristics &amp; emit layers may change. Verify critical configs against the official
+    <a href="https://github.com/SagerNet/sing-box">sing-box</a> /
+    <a href="https://github.com/Dreamacro/clash">Clash</a> docs before deploying.
+  </p>
+</footer>
+
+<script src="wasm_exec.js"></script>
+<script>
+(async () => {
+  const $ = (id) => document.getElementById(id);
+  const status = $('status');
+  const setStatus = (msg, cls = '') => {
+    status.textContent = msg;
+    status.className = 'status' + (cls ? ' ' + cls : '');
+  };
+
+  if (typeof Go === 'undefined') {
+    setStatus('Failed to load wasm runtime (wasm_exec.js missing).', 'error');
+    return;
+  }
+
+  const go = new Go();
+  try {
+    const resp = await fetch('proxykit.wasm');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const bytes = await resp.arrayBuffer();
+    const result = await WebAssembly.instantiate(bytes, go.importObject);
+    go.run(result.instance);
+  } catch (err) {
+    setStatus('Failed to load proxykit.wasm: ' + err.message, 'error');
+    return;
+  }
+
+  $('go').disabled = false;
+  $('go').textContent = 'Convert';
+  setStatus('Ready. Paste a subscription on the left and pick an output format.');
+
+  $('go').addEventListener('click', () => {
+    const input = $('input').value;
+    const from = $('from').value;
+    const to = $('to').value;
+    if (!input.trim()) {
+      setStatus('Input is empty.', 'error');
+      return;
+    }
+    if (typeof window.proxykitConvert !== 'function') {
+      setStatus('wasm not ready.', 'error');
+      return;
+    }
+    const t0 = performance.now();
+    const r = window.proxykitConvert(input, from, to);
+    const ms = (performance.now() - t0).toFixed(1);
+    if (!r || !r.ok) {
+      setStatus('Error: ' + (r && r.error ? r.error : 'unknown'), 'error');
+      $('output').value = '';
+      return;
+    }
+    $('output').value = r.output;
+    setStatus(`Converted ${r.count} node(s) (${r.detected} → ${to}) in ${ms} ms.`, 'ok');
+  });
+})();
+</script>
+</body>
+</html>

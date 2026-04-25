@@ -9,6 +9,9 @@
 
 **Translations**: [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [Español](./README.es.md) · [Français](./README.fr.md) · [Deutsch](./README.de.md) · [Русский](./README.ru.md)
 
+> 🌐 **Try it in your browser** — no install needed: **<https://au1rxx.github.io/proxykit/>**
+> Conversion runs as WebAssembly entirely client-side. Your subscription never leaves the page.
+
 ---
 
 ## What it does
@@ -22,11 +25,30 @@
 
 ---
 
+## Install
+
+Three ways to use proxykit, in increasing order of capability:
+
+| Method | Capability | Setup |
+|---|---|---|
+| **Web (online converter)** | `convert` only — pure WebAssembly, no install | Open <https://au1rxx.github.io/proxykit/> |
+| **Pre-built binary** | full CLI: `convert` / `test` / `unlock --direct` / `serve` | Download from [Releases](https://github.com/Au1rxx/proxykit/releases/latest) and unpack |
+| **From source** | full CLI + can build wasm yourself | `go install github.com/Au1rxx/proxykit/cmd/proxykit@latest` (requires Go 1.25+) |
+
+```bash
+# Linux / macOS — pick the right archive for your arch:
+curl -L https://github.com/Au1rxx/proxykit/releases/latest/download/proxykit_$(uname -s | tr A-Z a-z | sed 's/darwin/macos/')_$(uname -m).tar.gz | tar xz
+./proxykit --version
+
+# or via Go:
+go install github.com/Au1rxx/proxykit/cmd/proxykit@latest
+```
+
+> Note: `unlock --via` / `unlock --sub` / `serve --enable-probes` need a `sing-box` binary on PATH. Install it from <https://sing-box.sagernet.org/installation/>.
+
 ## Quickstart
 
 ```bash
-# build (requires Go 1.25+)
-go install github.com/Au1rxx/proxykit/cmd/proxykit@latest
 
 # convert a Clash subscription → sing-box config
 proxykit convert --in nodes.yaml --to singbox > nodes.json
@@ -142,8 +164,8 @@ See the public-facing commit log. Internally tracked milestones:
 
 - **W1–W5** ✅ Shipped: convert (6 formats), test --fast, unlock (3 modes + sing-box launcher)
 - **W6** ✅ Shipped: `serve` subcommand with convert/test/unlock endpoints + embedded SPA
-- **W7** Cloudflare Worker port (evaluating feasibility: tinygo wasm compile of the convert layer)
-- **W8** v0.1.0 release tag + two-repo cross-promotion
+- **W7** ✅ Shipped (alt path): browser-side WASM converter at <https://au1rxx.github.io/proxykit/> using the standard Go wasm target (no Cloudflare Worker dependency)
+- **W8** ✅ Shipped: v0.1.0 release tag + GoReleaser CI for multi-arch binaries + two-repo cross-promotion
 
 ---
 

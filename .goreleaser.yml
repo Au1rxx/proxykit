@@ -1,0 +1,103 @@
+version: 2
+
+project_name: proxykit
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: proxykit
+    main: ./cmd/proxykit
+    binary: proxykit
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.Version={{.Version}}
+
+archives:
+  - id: proxykit
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macos
+      {{- else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "arm64" }}arm64
+      {{- else }}{{ .Arch }}{{ end }}
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+      - README.zh-CN.md
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+      - "^test:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: Features
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: "Bug fixes"
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: Other
+      order: 999
+
+release:
+  github:
+    owner: Au1rxx
+    name: proxykit
+  draft: false
+  prerelease: auto
+  name_template: "proxykit {{.Tag}}"
+  header: |
+    ## proxykit {{.Tag}}
+
+    Single-binary Swiss-army knife for proxy subscriptions: format conversion,
+    liveness probes, streaming-unlock detection, embedded HTTP API + browser UI.
+
+    ### Install
+
+    **Pre-built binaries** (recommended): pick the archive for your OS/arch below.
+
+    ```bash
+    # Linux/macOS
+    curl -L https://github.com/Au1rxx/proxykit/releases/download/{{.Tag}}/proxykit_{{.Version}}_linux_x86_64.tar.gz | tar xz
+    ./proxykit --version
+    ```
+
+    **From source**:
+    ```bash
+    go install github.com/Au1rxx/proxykit/cmd/proxykit@{{.Tag}}
+    ```
+
+    **In-browser converter** (no install): https://au1rxx.github.io/proxykit/
+  footer: |
+    ---
+
+    Full changelog and source: https://github.com/Au1rxx/proxykit/compare/{{.PreviousTag}}...{{.Tag}}

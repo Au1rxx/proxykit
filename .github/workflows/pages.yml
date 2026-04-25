@@ -1,0 +1,57 @@
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cmd/proxykit-wasm/**"
+      - "internal/convert/**"
+      - "web/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Build wasm
+        run: |
+          mkdir -p dist
+          cp web/index.html dist/index.html
+          cp web/wasm_exec.js dist/wasm_exec.js
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o dist/proxykit.wasm ./cmd/proxykit-wasm
+          ls -lh dist/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
