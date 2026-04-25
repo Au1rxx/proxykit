@@ -18,7 +18,6 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
-	"syscall"
 	"time"
 
 	upstream "github.com/Au1rxx/free-vpn-subscriptions/pkg/emit"
@@ -112,7 +111,7 @@ func LaunchNode(ctx context.Context, n *node.Node, cfg Config) (*Proc, error) {
 
 	runCtx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(runCtx, bin, "run", "-c", cfgPath)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setProcAttrs(cmd)
 	if err := cmd.Start(); err != nil {
 		cancel()
 		_ = os.Remove(cfgPath)
@@ -121,8 +120,7 @@ func LaunchNode(ctx context.Context, n *node.Node, cfg Config) (*Proc, error) {
 
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 	if !waitPort(addr, startupTO) {
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		_, _ = cmd.Process.Wait()
+		killProc(cmd)
 		cancel()
 		_ = os.Remove(cfgPath)
 		return nil, fmt.Errorf("sing-box did not open %s within %s (config: %s)", addr, startupTO, cfgPath)
@@ -143,8 +141,7 @@ func (p *Proc) Stop() {
 		return
 	}
 	if p.cmd != nil && p.cmd.Process != nil {
-		_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
-		_, _ = p.cmd.Process.Wait()
+		killProc(p.cmd)
 		p.cmd = nil
 	}
 	if p.cancel != nil {
